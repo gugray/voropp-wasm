@@ -4,10 +4,11 @@ mkdir dist
 EXPORTED_FUNCTIONS="\
   _malloc,_free,\
   _create_container,_delete_container,\
-  _container_point_inside,_container_put,_container_add_wall,\
+  _container_point_inside,_container_put,_container_add_wall,_container_compute,\
   _create_wall_plane,_delete_wall"
 
-emcc src/voropp.cc src/voropp/voro++.cc \
+emcc src/voro_wrap.cc src/buffer.cc \
+  src/voropp/voro++.cc \
   -o dist/voropp-module.js \
   -O3 \
   -s EXPORTED_FUNCTIONS="$EXPORTED_FUNCTIONS" \
