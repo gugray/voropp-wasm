@@ -1,0 +1,43 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "cmd_line",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/examples/cmd_line.out",
+      "args": [
+        "-wp", "1", "0.4", "0", "0.4",
+        "-wp", "1", "-0.4", "0", "0.4",
+        "-wp", "-1", "-0.4", "0", "0.4",
+        "-wp", "-1", "0.4", "0", "0.4",
+        "-wp", "0", "0.4", "1", "0.4",
+        "-wp", "0", "-0.4", "1", "0.4",
+        "-wp", "0", "-0.4", "-1", "0.4",
+        "-wp", "0", "0.4", "-1", "0.4",
+        "-c", "ID %i POS (%x,%y,%z) VERTS %w %p EDGES %g FACES %s %t",
+        "-1", "1", "-1", "1", "-1", "1",
+        "test-points-5.txt"
+      ],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/examples",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "lldb",
+      "preLaunchTask": "Build cmd_line"
+    },
+    {
+      "name": "voro_test_cli",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/voro_test_cli.out",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/examples",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "lldb",
+      "preLaunchTask": "Build voro_test_cli"
+    }
+  ]
+}

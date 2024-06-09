@@ -1,126 +1,112 @@
 #include "voro_wrap.h"
-#include "voropp/pre_container.hh"
-#include "voropp/container.hh"
-#include "voropp/wall.hh"
-#include "voropp/c_loops.hh"
+#include "voropp/voro++.hh"
 #include "buffer.h"
 
 using namespace voro;
 
-// void* create_pre_container(double x_min, double x_max,
-//     double y_min, double y_max,
-//     double z_min, double z_max)
-// {
-//     return new pre_container(x_min, x_max, y_min, y_max, z_min, z_max, false, false, false);
-// }
+#define INIT_MEM 8
 
-// void delete_pre_container(void *ptr)
-// {
-//     pre_container *pcon = (pre_container*)ptr;
-//     delete pcon;
-// }
-
-void* create_container(double x_min, double x_max,
-    double y_min, double y_max,
-    double z_min, double z_max,
-    int n_x, int n_y, int n_z, int init_mem)
+double *calculate_voronoi(double *data)
 {
-    return new container(x_min, x_max, y_min, y_max, z_min, z_max,
-        n_x, n_y, n_z, false, false, false, init_mem);
-}
-
-void delete_container(void *ptr)
-{
-    container *con = (container *)ptr;
-    delete con;
-}
-
-bool container_point_inside(void *ptr, double x, double y, double z)
-{
-    container *con = (container *)ptr;
-    return con->point_inside(x, y, z);
-}
-
-void container_put(void *ptr, int n, double x, double y, double z)
-{
-    container *con = (container *)ptr;
-    con->put(n, x, y, z);
-}
-
-void container_add_wall(void *ptr, void *pWall)
-{
-    container *con = (container *)ptr;
-    wall *w = (wall*)pWall;
-    con->add_wall(w);
-}
-
-double* container_compute(void *ptr)
-{
+    // Output will go here
     Buffer buf;
     buf.push(0); // total number of doubles in buffer
-    buf.push(0); // number of particles
-    container *con = (container *)ptr;
-    c_loop_all vl(*con);
-    voronoicell c;
-    std::vector<int> fv; // Receives face vertices
-    size_t nParticles = 0;
-    bool gotWork = vl.start();
-    while (gotWork)
+    buf.push(0); // number of cells
+
+    size_t pos = 0;
+    double ax = data[pos++];
+    double bx = data[pos++];
+    double ay = data[pos++];
+    double by = data[pos++];
+    double az = data[pos++];
+    double bz = data[pos++];
+
+    pre_container pcon(ax, bx, ay, by, az, bz, false, false, false);
+	wall_list wl;
+
+    size_t nWallPlanes = (size_t)data[pos++];
+    for (size_t i = 0; i < nWallPlanes; ++i)
     {
-        gotWork = vl.inc();
-        if (!con->compute_cell(c, vl)) continue;
-        ++nParticles;
-
-        // Particle ID and coordinates
-        int pid;
-        double x, y, z, r;
-        vl.pos(pid, x, y, z, r);
-        buf.push((double)pid);
-        buf.push(x);
-        buf.push(y);
-        buf.push(z);
-
-        // Number of vertices, and each vertex (x, y, z)
-        buf.push((double)c.p);
-        for (size_t i = 0; i < c.p; ++i)
-        {
-            buf.push(c.pts[3*i]);
-            buf.push(c.pts[3*i+1]);
-            buf.push(c.pts[3*i+2]);
-        }
-
-        // This will be face count; filled in later
-        size_t faceCountPos = buf.pos;
-        size_t faceCount = 0;
-        buf.push(0);
-        // Retrieve and interpret face vertices
-        c.face_vertices(fv);
-        for (size_t i = 0; i < fv.size(); ++i)
-        {
-            size_t nVertsInFace = fv[i++];
-            if (nVertsInFace < 3) continue;
-            ++faceCount;
-            buf.push((double)nVertsInFace);
-            for (size_t j = 0; j < nVertsInFace; ++j, ++i)
-                buf.push((double)fv[i]);
-        }
-        // Backfill face count into buffer
-        buf.set_at(faceCountPos, (double)faceCount);
+        double wnx = data[pos++];
+        double wny = data[pos++];
+        double wnz = data[pos++];
+        double wd = data[pos++];
+        wl.add_wall(new wall_plane(wnx, wny, wnz, wd));
     }
+
+    size_t nPoints = (size_t)data[pos++];
+    for (size_t i = 0; i < nPoints; ++i)
+    {
+        int id = (int)data[pos++];
+        double x = data[pos++];
+        double y = data[pos++];
+        double z = data[pos++];
+        pcon.put(id, x, y, z);
+    }
+
+    int nx, ny, nz;
+    pcon.guess_optimal(nx, ny, nz);
+
+    container con(ax, bx, ay, by, az, bz,
+        nx, ny, nz, false, false, false,
+        INIT_MEM);
+    con.add_wall(wl);
+    pcon.setup(con);
+
+    // Retrieve result
+    voronoicell c;
+    std::vector<int> fv;
+    size_t nParticles = 0;
+    c_loop_all vl(con);
+    if (vl.start())
+    {
+        do
+        {
+            if (!con.compute_cell(c, vl)) continue;
+            ++nParticles;
+
+            // Particle ID and coordinates
+            int pid;
+            double x, y, z, r;
+            vl.pos(pid, x, y, z, r);
+            buf.push((double)pid);
+            buf.push(x);
+            buf.push(y);
+            buf.push(z);
+
+            // Number of vertices, and each vertex (x, y, z)
+            buf.push((double)c.p);
+            for (size_t i = 0; i < c.p; ++i)
+            {
+                buf.push(c.pts[3*i] * 0.5);
+                buf.push(c.pts[3*i+1] * 0.5);
+                buf.push(c.pts[3*i+2] * 0.5);
+            }
+
+            // Number of faces
+            buf.push((double)c.number_of_faces());
+
+            // Retrieve face vertices
+            c.face_vertices(fv);
+            for (int ix = 0; ix < fv.size(); )
+            {
+                int nVertsInFace = fv[ix++];
+                buf.push((double)nVertsInFace);
+                if (nVertsInFace == 1) buf.push((double)fv[ix++]);
+                else if (nVertsInFace > 1)
+                {
+                    int end = ix + nVertsInFace;
+                    buf.push((double)fv[ix++]);
+                    while (ix < end) buf.push((double)fv[ix++]);
+                }
+            }
+        }
+        while (vl.inc());
+    }
+
+    wl.deallocate();
 
     buf.set_at(1, (double)nParticles);
     buf.set_at(0, (double)buf.pos);
     return (double*)buf.buf;
-}
-
-void* create_wall_plane(double nx, double ny, double nz, double dist)
-{
-    wall *w = new wall_plane(nx, ny, nz, dist);
-    return w;
-}
-
-void delete_wall(void *ptr)
-{
-    wall *w = (wall*)ptr;
-    delete w;
 }

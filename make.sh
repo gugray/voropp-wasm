@@ -2,10 +2,7 @@ rm -rf dist
 mkdir dist
 
 EXPORTED_FUNCTIONS="\
-  _malloc,_free,\
-  _create_container,_delete_container,\
-  _container_point_inside,_container_put,_container_add_wall,_container_compute,\
-  _create_wall_plane,_delete_wall"
+  _malloc,_free,_calculate_voronoi"
 
 emcc src/voro_wrap.cc src/buffer.cc \
   src/voropp/voro++.cc \

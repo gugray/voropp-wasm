@@ -1,5 +1,7 @@
 dist
 examples/voropp-module.*
 *.o
+*.out
+*.dSYM
 
 .idea

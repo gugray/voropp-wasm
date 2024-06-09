@@ -1,9 +1,26 @@
 {
   "files.exclude": {
-    ".o": true,
+    "**/*.o": true,
+    "**/*.out": true,
+    "**/*.dSYM": true,
     "**/.git": true,
     "**/.idea": true,
     "**/.DS_Store": true,
   },
   "json.validate.enable": false,
+  "files.associations": {
+    "*.json": "jsonc",
+    "cstring": "cpp",
+    "__functional_03": "cpp",
+    "__hash_table": "cpp",
+    "__split_buffer": "cpp",
+    "algorithm": "cpp",
+    "deque": "cpp",
+    "memory_resource": "cpp",
+    "functional": "cpp",
+    "memory": "cpp",
+    "string": "cpp",
+    "unordered_map": "cpp",
+    "vector": "cpp"
+  },
 }

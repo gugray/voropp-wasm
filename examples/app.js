@@ -1,80 +1,143 @@
 import createVoroPP from "./voropp-module.js"
 const mod = await createVoroPP();
 
-const nInitMem = 8;
-const nExpectedParticles = 256;
+const rand = Math.random;
+const log = false;
 
-// const nGridSize = Math.ceil(Math.pow(nExpectedParticles / nInitMem, 1/3) + 2);
-const nGridSize = 3;
-console.log(nGridSize);
-
-const t0 = performance.now();
-
-const pCon = mod._create_container(-1, 1, -1, 1, -1, 1,
-  nGridSize, nGridSize, nGridSize, nInitMem);
+const wallA = 1;
+const wallB = 0.4;
+const wallD = 0.4;
 
 const walls = [
-  mod._create_wall_plane(1, 1, 1, 1),
-  mod._create_wall_plane(-1, -1, 1, 1),
-  mod._create_wall_plane(1, -1, -1, 1),
-  mod._create_wall_plane(-1, 1, -1, 1),
+  [wallA, wallB, 0, wallD],
+  [wallA, -wallB, 0, wallD],
+  [-wallA, -wallB, 0, wallD],
+  [-wallA, wallB, 0, wallD],
+  [0, wallB, wallA, wallD],
+  [0, -wallB, wallA, wallD],
+  [0, -wallB, -wallA, wallD],
+  [0, wallB, -wallA, wallD],
 ];
-walls.forEach(pw => mod._container_add_wall(pCon, pw));
 
-let nActualParticles = 0;
-for (let i = 0; i < nExpectedParticles; ++i) {
-  const x = -1 + 2 * Math.random();
-  const y = -1 + 2 * Math.random();
-  const z = -1 + 2 * Math.random();
-  if (mod._container_point_inside(pCon, x, y, z)) {
-    // console.log(`ID: ${i} (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})`);
-    mod._container_put(pCon, i, x, y, z);
-    ++nActualParticles;
+const points = [
+  [-0.15, 0.00, 0.87],
+  [-0.19, -0.23, 0.15],
+  [-0.39, 0.01, -0.51],
+  [0.11, -0.00, -0.98],
+  [0.34, 0.08, 0.05],
+];
+
+function genPoints(nPoints) {
+  points.length = 0;
+  for (let i = 0; i < nPoints; ++i) {
+    const x = -1 + 2 * rand();
+    const z = -1 + 2 * rand();
+    let y = rand();
+    y = Math.pow(y, 3);
+    if (rand() < 0.5) y *= -1;
+    y *= 0.5;
+    points.push([x, y, z]);
   }
 }
 
-const pRes = mod._container_compute(pCon);
+genPoints(6400);
+
+const t0 = performance.now();
+
+const szInput =
+  6 + // Space bounds
+  1 + walls.length * 4 + // Wall planes
+  1 + points.length * 4; // Particles
+
+const pInput = mod._malloc(szInput * 8);
+const input = new Float64Array(mod.HEAPU8.buffer, pInput, szInput);
+let ip = 0;
+input[ip++] = -1;
+input[ip++] = 1;
+input[ip++] = -1;
+input[ip++] = 1;
+input[ip++] = -1;
+input[ip++] = 1;
+
+input[ip++] = walls.length;
+for (let i = 0; i < walls.length; ++i) {
+  input[ip++] = walls[i][0];
+  input[ip++] = walls[i][1];
+  input[ip++] = walls[i][2];
+  input[ip++] = walls[i][3];
+}
+
+input[ip++] = points.length;
+for (let i = 0; i < points.length; ++i) {
+  input[ip++] = i;
+  input[ip++] = points[i][0];
+  input[ip++] = points[i][1];
+  input[ip++] = points[i][2];
+}
+
+let strOutput = "";
+
+const pRes = mod._calculate_voronoi(pInput);
 const dummyArr = new Float64Array(mod.HEAPU8.buffer, pRes, 1);
 const resSize = dummyArr[0];
 const resArr = new Float64Array(mod.HEAPU8.buffer, pRes, resSize);
 let nCells = resArr[1];
 let pos = 2;
-while (nCells > 0) {
-  --nCells;
+
+for (let cix = 0; cix < nCells; ++cix) {
+
   const id = resArr[pos++];
   const px = resArr[pos++];
   const py = resArr[pos++];
   const pz = resArr[pos++];
-  // console.log(`ID: ${id} (${px.toFixed(2)}, ${py.toFixed(2)}, ${pz.toFixed(2)})`);
+  if (log) console.log(`ID: ${id} (${px.toFixed(2)}, ${py.toFixed(2)}, ${pz.toFixed(2)})`);
+  let strItem = `ID ${id} POS (${px},${py},${pz})`;
+
   let nVerts = resArr[pos++];
-  while (nVerts > 0) {
-    --nVerts;
+  if (log) console.log(`Vertices: ${nVerts}`);
+  strItem += ` VERTS ${nVerts}`;
+
+  for (let i = 0; i < nVerts; ++i) {
     const vx = resArr[pos++];
     const vy = resArr[pos++];
     const vz = resArr[pos++];
-    // console.log(`Vertex: (${vx.toFixed(2)}, ${vy.toFixed(2)}, ${vz.toFixed(2)})`);
+    if (log) console.log(`Vertex: (${vx.toFixed(2)}, ${vy.toFixed(2)}, ${vz.toFixed(2)})`);
+    strItem += ` (${vx},${vy},${vz})`;
   }
 
+  strItem += " EDGES 0";
+
   let nFaces = resArr[pos++];
-  // console.log(`Faces: ${nFaces}`);
+  if (log) console.log(`Faces: ${nFaces}`);
+  strItem += ` FACES ${nFaces}`;
+
   while (nFaces > 0) {
     --nFaces;
     let nVertsInFace = resArr[pos++];
-    // console.log(`Vertices in face: ${nVertsInFace}`);
+    if (log) console.log(`Vertices in face: ${nVertsInFace}`);
     const faceVerts = [];
     while (nVertsInFace > 0) {
       --nVertsInFace;
       faceVerts.push(resArr[pos++]);
     }
-    // console.log(`Namely: ${faceVerts}`);
+    if (log) console.log(`Namely: ${faceVerts}`);
+    strItem += " (";
+    for (let i = 0; i < faceVerts.length; ++i) {
+      if (i != 0) strItem += ",";
+      strItem += `${faceVerts[i]}`;
+    }
+    strItem += ")"
   }
-}
-mod._free(pRes);
 
-walls.forEach(pw => mod._delete_wall(pw));
-mod._delete_container(pCon);
+  strOutput += strItem + "\n";
+}
+
+mod._free(pRes);
+mod._free(pInput);
 
 const t1 = performance.now();
 
-console.log(`Calculated Voronoi cells for ${nActualParticles} actual particles: ${t1-t0} msec`);
+console.log(`Calculated result for ${points.length} particles, giving ${nCells} Voronoi cells: ${t1-t0} msec`);
+
+// console.log(strOutput);
 
