@@ -74,6 +74,9 @@ double *calculate_voronoi(double *data)
             buf.push(y);
             buf.push(z);
 
+            // Cell volume
+            buf.push(c.volume());
+
             // Number of vertices, and each vertex (x, y, z)
             buf.push((double)c.p);
             for (size_t i = 0; i < c.p; ++i)

@@ -93,6 +93,8 @@ for (let cix = 0; cix < nCells; ++cix) {
   if (log) console.log(`ID: ${id} (${px.toFixed(2)}, ${py.toFixed(2)}, ${pz.toFixed(2)})`);
   let strItem = `ID ${id} POS (${px},${py},${pz})`;
 
+  const vol = resArr[pos++];
+
   let nVerts = resArr[pos++];
   if (log) console.log(`Vertices: ${nVerts}`);
   strItem += ` VERTS ${nVerts}`;
