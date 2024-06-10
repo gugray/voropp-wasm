@@ -11,6 +11,7 @@ emcc src/voro_wrap.cc src/buffer.cc \
   -s EXPORTED_FUNCTIONS="$EXPORTED_FUNCTIONS" \
   -sEXPORTED_RUNTIME_METHODS=ccall,cwrap \
   -s TOTAL_MEMORY=1024MB \
+  -s ENVIRONMENT="web" \
   -s EXPORT_ES6=1 -sMODULARIZE -s EXPORT_NAME="createVoroPP"
 
 cp dist/voropp-module.* examples/
