@@ -2,11 +2,12 @@ import createVoroPP from "./voropp-module.js"
 const mod = await createVoroPP();
 
 const rand = Math.random;
-const log = false;
+const log = true;
 
 const wallA = 1;
 const wallB = 0.4;
 const wallD = 0.4;
+const insetBy = 0.02;
 
 const walls = [
   [wallA, wallB, 0, wallD],
@@ -40,7 +41,7 @@ function genPoints(nPoints) {
   }
 }
 
-genPoints(6400);
+// genPoints(6400);
 
 const t0 = performance.now();
 
@@ -77,7 +78,7 @@ for (let i = 0; i < points.length; ++i) {
 
 let strOutput = "";
 
-const pRes = mod._calculate_voronoi(pInput);
+const pRes = mod._calculate_voronoi(pInput, insetBy);
 const dummyArr = new Float64Array(mod.HEAPU8.buffer, pRes, 1);
 const resSize = dummyArr[0];
 const resArr = new Float64Array(mod.HEAPU8.buffer, pRes, resSize);
@@ -108,7 +109,7 @@ for (let cix = 0; cix < nCells; ++cix) {
   }
 
   strItem += " EDGES 0";
-
+  
   let nFaces = resArr[pos++];
   if (log) console.log(`Faces: ${nFaces}`);
   strItem += ` FACES ${nFaces}`;
@@ -117,6 +118,46 @@ for (let cix = 0; cix < nCells; ++cix) {
     --nFaces;
     let nVertsInFace = resArr[pos++];
     if (log) console.log(`Vertices in face: ${nVertsInFace}`);
+    const faceVerts = [];
+    while (nVertsInFace > 0) {
+      --nVertsInFace;
+      faceVerts.push(resArr[pos++]);
+    }
+    if (log) console.log(`Namely: ${faceVerts}`);
+    strItem += " (";
+    for (let i = 0; i < faceVerts.length; ++i) {
+      if (i != 0) strItem += ",";
+      strItem += `${faceVerts[i]}`;
+    }
+    strItem += ")"
+  }
+
+  // Inset version of cell?
+  let nInsetVerts = resArr[pos++];
+  if (log) console.log(`InsetVertices: ${nInsetVerts}`);
+  strItem += ` IVERTS ${nInsetVerts}`;
+
+  if (nInsetVerts == 0) {
+    strOutput += strItem + "\n";
+    continue;
+  }
+
+  for (let i = 0; i < nInsetVerts; ++i) {
+    const vx = resArr[pos++];
+    const vy = resArr[pos++];
+    const vz = resArr[pos++];
+    if (log) console.log(`InsetVertex: (${vx.toFixed(2)}, ${vy.toFixed(2)}, ${vz.toFixed(2)})`);
+    strItem += ` (${vx},${vy},${vz})`;
+  }
+
+  let nInsetFaces = resArr[pos++];
+  if (log) console.log(`InsetFaces: ${nInsetFaces}`);
+  strItem += ` IFACES ${nInsetFaces}`;
+
+  while (nInsetFaces > 0) {
+    --nInsetFaces;
+    let nVertsInFace = resArr[pos++];
+    if (log) console.log(`Vertices in iface: ${nVertsInFace}`);
     const faceVerts = [];
     while (nVertsInFace > 0) {
       --nVertsInFace;

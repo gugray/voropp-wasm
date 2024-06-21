@@ -1,12 +1,21 @@
 #include "voro_wrap.h"
 #include "voropp/voro++.hh"
 #include "buffer.h"
+#include "vec3.h"
 
 using namespace voro;
 
 #define INIT_MEM 8
 
-double *calculate_voronoi(double *data)
+bool inset_faces(
+    voronoicell_neighbor &c,
+    const std::vector<Vec3> &verts,
+    const std::vector<int> &faceFirstTriIxs,
+    std::vector<double> &nor,
+    std::vector<int> &neigh,
+    double inset);
+
+double *calculate_voronoi(double *data, double inset)
 {
     // Output will go here
     Buffer buf;
@@ -31,7 +40,7 @@ double *calculate_voronoi(double *data)
         double wny = data[pos++];
         double wnz = data[pos++];
         double wd = data[pos++];
-        wl.add_wall(new wall_plane(wnx, wny, wnz, wd));
+        wl.add_wall(new wall_plane(wnx, wny, wnz, wd, -1 - i));
     }
 
     size_t nPoints = (size_t)data[pos++];
@@ -54,8 +63,12 @@ double *calculate_voronoi(double *data)
     pcon.setup(con);
 
     // Retrieve result
-    voronoicell c;
+    voronoicell_neighbor c, c2;
+    std::vector<Vec3> verts;
     std::vector<int> fv;
+    std::vector<int> faceFirstTriIxs; // Indexes of first 3 vertices from each face; 3 items per face
+    std::vector<double> nor; // "Local" variable of inset_faces function; reused to save allocations
+    std::vector<int> neigh; // "Local" variable of inset_faces function; reused to save allocations
     size_t nParticles = 0;
     c_loop_all vl(con);
     if (vl.start())
@@ -64,15 +77,18 @@ double *calculate_voronoi(double *data)
         {
             if (!con.compute_cell(c, vl)) continue;
             ++nParticles;
+            verts.clear();
+            faceFirstTriIxs.clear();
 
             // Particle ID and coordinates
             int pid;
-            double x, y, z, r;
-            vl.pos(pid, x, y, z, r);
+            Vec3 part;
+            double r;
+            vl.pos(pid, part.x, part.y, part.z, r);
             buf.push((double)pid);
-            buf.push(x);
-            buf.push(y);
-            buf.push(z);
+            buf.push(part.x);
+            buf.push(part.y);
+            buf.push(part.z);
 
             // Cell volume
             buf.push(c.volume());
@@ -81,9 +97,11 @@ double *calculate_voronoi(double *data)
             buf.push((double)c.p);
             for (size_t i = 0; i < c.p; ++i)
             {
-                buf.push(c.pts[3*i] * 0.5);
-                buf.push(c.pts[3*i+1] * 0.5);
-                buf.push(c.pts[3*i+2] * 0.5);
+                Vec3 v(c.pts[3*i] * 0.5, c.pts[3*i+1] * 0.5, c.pts[3*i+2] * 0.5);
+                verts.push_back(v);
+                buf.push(v.x);
+                buf.push(v.y);
+                buf.push(v.z);
             }
 
             // Number of faces
@@ -91,6 +109,54 @@ double *calculate_voronoi(double *data)
 
             // Retrieve face vertices
             c.face_vertices(fv);
+            for (int ix = 0; ix < fv.size(); )
+            {
+                int nVertsInFace = fv[ix++];
+                buf.push((double)nVertsInFace);
+                if (nVertsInFace < 3)
+                {
+                    for (int k = 0; k < 3; ++k)
+                        faceFirstTriIxs.push_back(-1);
+                }
+                else
+                {
+                    for (int k = 0; k < 3; ++k)
+                        faceFirstTriIxs.push_back(fv[ix+k]);
+                }
+                int end = ix + nVertsInFace;
+                while (ix < end) buf.push((double)fv[ix++]);
+            }
+
+            // Perfom insetting on copy, if requested
+            bool gotRealInset = false;
+            if (inset != 0)
+            {
+                c2 = c;
+                gotRealInset = inset_faces(c2, verts, faceFirstTriIxs, nor, neigh, inset);
+            }
+            
+            // After inset: number of vertices, and each vertex
+            // If 0, it means cell disappeared through insetting, or no insetting was requested
+            if (!gotRealInset)
+            {
+                buf.push(0);
+                continue;
+            }
+
+            // Number of vertices, and each vertex (x, y, z)
+            buf.push((double)c2.p);
+            for (size_t i = 0; i < c2.p; ++i)
+            {
+                buf.push(c2.pts[3*i] * 0.5);
+                buf.push(c2.pts[3*i+1] * 0.5);
+                buf.push(c2.pts[3*i+2] * 0.5);
+            }
+
+            // Number of faces
+            buf.push((double)c2.number_of_faces());
+
+            // Retrieve face vertices
+            c2.face_vertices(fv);
             for (int ix = 0; ix < fv.size(); )
             {
                 int nVertsInFace = fv[ix++];
@@ -103,6 +169,7 @@ double *calculate_voronoi(double *data)
                     while (ix < end) buf.push((double)fv[ix++]);
                 }
             }
+
         }
         while (vl.inc());
     }
@@ -112,4 +179,47 @@ double *calculate_voronoi(double *data)
     buf.set_at(1, (double)nParticles);
     buf.set_at(0, (double)buf.pos);
     return (double*)buf.buf;
+}
+
+bool inset_faces(
+    voronoicell_neighbor &c,
+    const std::vector<Vec3> &verts,
+    const std::vector<int> &faceFirstTriIxs,
+    std::vector<double> &nor,
+    std::vector<int> &neigh,
+    double inset)
+{
+    bool cellRemaining = true;
+
+    // Get cell's normal vectors
+    c.normals(nor);
+    c.neighbors(neigh);
+
+    // Plane with each of them
+    size_t nFaces = c.number_of_faces();
+    for (size_t i = 0; cellRemaining && i < nFaces; ++i)
+    {
+        // Face's neighbor is a wall: not insetting this face
+        if (neigh[i] < 0) continue;
+
+        // Face's normal vector; particle
+        Vec3 n(nor[i*3], nor[i*3+1], nor[i*3+2]);
+
+        // Distance of face's plane from particle
+        Vec3 v1 = verts[faceFirstTriIxs[i*3]];
+        Vec3 v2 = verts[faceFirstTriIxs[i*3+1]];
+        Vec3 v3 = verts[faceFirstTriIxs[i*3+2]];
+        double d = distPlaneOrigin(v1, v2, v3);
+
+        // Shave off the cell
+        double len = (d - inset) * 2;
+        if (len >= 0) cellRemaining &= c.plane(n.x, n.y, n.z, len);
+        else
+        {
+            n.mul(-1);
+            cellRemaining &= c.plane(n.x, n.y, n.z, -len);
+        }
+    }
+
+    return cellRemaining;
 }

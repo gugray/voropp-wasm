@@ -1,9 +1,11 @@
+#pragma once
+
 #include <stdlib.h>
 #include <math.h>
 
 extern "C"
 {
 
-double *calculate_voronoi(double *data);
+double *calculate_voronoi(double *data, double inset);
 
 }
