@@ -2,6 +2,7 @@
 #include "voropp/voro++.hh"
 #include "buffer.h"
 #include "vec3.h"
+#include "volume_tester.h"
 
 using namespace voro;
 
@@ -223,3 +224,22 @@ bool inset_faces(
 
     return cellRemaining;
 }
+
+void *create_volume_tester(double *data)
+{
+    return new VolumeTester(data);
+}
+
+void delete_volume_tester(void *ptr)
+{
+    VolumeTester *vt = (VolumeTester*)ptr;
+    delete vt;
+}
+
+bool is_point_inside(void *ptr, double x, double y, double z)
+{
+    VolumeTester *vt = (VolumeTester*)ptr;
+    return vt->IsPointInside(x, y, z);
+}
+
+

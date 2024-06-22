@@ -109,7 +109,7 @@ for (let cix = 0; cix < nCells; ++cix) {
   }
 
   strItem += " EDGES 0";
-  
+
   let nFaces = resArr[pos++];
   if (log) console.log(`Faces: ${nFaces}`);
   strItem += ` FACES ${nFaces}`;
